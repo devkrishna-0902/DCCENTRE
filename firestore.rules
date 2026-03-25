@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: enrollments
+    // Document ID: auto-generated
+    // Fields:
+    //   - fullName: string (required)
+    //   - email: string (required, email format)
+    //   - course: string (required)
+    //   - phone: string (required)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "devkrishna.0902@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidEnrollment(data) {
+      return data.keys().hasAll(['fullName', 'email', 'course', 'phone', 'createdAt']) &&
+             data.fullName is string && data.fullName.size() > 0 && data.fullName.size() < 100 &&
+             isValidEmail(data.email) &&
+             data.course is string && data.course.size() > 0 &&
+             data.phone is string && data.phone.size() >= 10 && data.phone.size() <= 15 &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /enrollments/{enrollmentId} {
+      // Anyone can create an enrollment
+      allow create: if isValidEnrollment(request.resource.data);
+      
+      // Only admins can read, update, or delete enrollments
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAdmin();
+    }
+  }
+}
